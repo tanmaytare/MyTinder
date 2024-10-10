@@ -79,5 +79,13 @@ dependencies {
     implementation platform(libs.firebase.bom.v3211)
     implementation libs.google.firebase.database.ktx
     implementation libs.google.firebase.analytics.ktx
+    implementation libs.retrofit
+    implementation libs.converter.gson
+    implementation libs.logging.interceptor
+    implementation libs.glide
+    implementation libs.androidx.lifecycle.runtime.ktx.v231
+    implementation libs.androidx.activity.compose.v131
+    implementation libs.glide.v4120
+    annotationProcessor libs.compiler
 }
 apply plugin: 'com.google.gms.google-services'

