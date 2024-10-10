@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "906008186095",
+    "project_id": "covert-ec769",
+    "storage_bucket": "covert-ec769.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:906008186095:android:33ba950a32e46a1a35df1a",
+        "android_client_info": {
+          "package_name": "com.example.covert"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDJTyor6inbiEkyr4OWRwLcC0D5_KFY_bI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:906008186095:android:a38234aa9c04c71a35df1a",
+        "android_client_info": {
+          "package_name": "com.example.myapplication3"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDJTyor6inbiEkyr4OWRwLcC0D5_KFY_bI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
