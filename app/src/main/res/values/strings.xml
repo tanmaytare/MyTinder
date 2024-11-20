@@ -1,3 +1,7 @@
 <resources>
-    <string name="app_name">My Application3</string>
+    <string name="app_name">MyTinder</string>
+    <string name="enter_name_title">Enter Your Name</string>
+    <string name="enter_name_hint">Your Name</string>
+    <string name="button_ok">OK</string>
+
 </resources>

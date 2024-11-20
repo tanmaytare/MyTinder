@@ -1,19 +1,27 @@
 package com.example.myapplication3
 
 import android.Manifest
+import android.animation.Animator
+import android.animation.ObjectAnimator
+import android.annotation.SuppressLint
+import android.app.AlertDialog
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
-import android.widget.Button
+import android.view.GestureDetector
+import android.view.MotionEvent
+import android.widget.EditText
 import android.widget.ImageView
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.work.*
 import com.bumptech.glide.Glide
+import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.firebase.FirebaseApp
 import com.example.myapplication3.network.RetrofitInstance
 import kotlinx.coroutines.CoroutineScope
@@ -23,11 +31,13 @@ import java.util.concurrent.TimeUnit
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var imageView: ImageView // ImageView to display the fetched image
-    private lateinit var buttonWrong: Button // Button for 'wrong'
-    private lateinit var buttonRight: Button // Button for 'right'
-    private var currentImageUrl: String? = null // Variable to hold the current image URL
+    private lateinit var imageView: ImageView
+    private lateinit var heartIcon: ImageView
+    private lateinit var brokenHeartIcon: ImageView
+    private lateinit var gestureDetector: GestureDetector
+    private var currentImageUrl: String? = null
 
+    @SuppressLint("ClickableViewAccessibility")
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -37,31 +47,49 @@ class MainActivity : AppCompatActivity() {
         FirebaseApp.initializeApp(this)
         Log.d("MainActivity", "Firebase initialized.")
 
-        // Initialize the ImageView and buttons
-        imageView = findViewById(R.id.image_view) // Make sure this ID matches your XML
-        buttonWrong = findViewById(R.id.button_wrong)
-        buttonRight = findViewById(R.id.button_right)
+        // Initialize ImageView and Heart icons
+        imageView = findViewById(R.id.image_view)
+        heartIcon = findViewById(R.id.heart_icon)
+        brokenHeartIcon = findViewById(R.id.broken_heart_icon)
 
-        // Set up button click listeners
-        buttonWrong.setOnClickListener {
-            Log.d("MainActivity", "Image rejected: $currentImageUrl")
-            fetchRandomImage() // Load new image when "wrong" is clicked
+        // Initialize GestureDetector
+        gestureDetector = GestureDetector(this, SwipeGestureListener())
+
+        // Set touch listener to detect gestures on the image
+        imageView.setOnTouchListener { _, event ->
+            Log.d("MainActivity", "Touch event detected: ${event.action}")
+            gestureDetector.onTouchEvent(event)
         }
 
-        buttonRight.setOnClickListener {
-            Log.d("MainActivity", "Image accepted: $currentImageUrl")
-            fetchRandomImage() // Load new image when "right" is clicked
+        // Initialize Bottom Navigation
+        val bottomNavigationView = findViewById<BottomNavigationView>(R.id.bottom_navigation)
+        bottomNavigationView.setOnItemSelectedListener { item ->
+            when (item.itemId) {
+                R.id.nav_home -> {
+                    Log.d("MainActivity", "Home selected")
+                    true
+                }
+                R.id.nav_favorite -> {
+                    Log.d("MainActivity", "Favorite selected")
+                    true
+                }
+                R.id.nav_profile -> {
+                    Log.d("MainActivity", "Profile selected")
+                    val intent = Intent(this, ProfileActivity::class.java)
+                    startActivity(intent)
+                    true
+                }
+                else -> false
+            }
         }
 
-        // Check for permissions and request if necessary
+        // Check permissions and request if necessary
         if (!hasAllPermissions()) {
             Log.d("MainActivity", "Requesting permissions.")
             requestAllPermissions()
         } else {
             Log.d("MainActivity", "All permissions granted.")
-            scheduleUploadWorker()
-            scheduleImmediateUploadWorker()
-            fetchRandomImage() // Fetch random image after permissions are granted
+            onPermissionsGranted()
         }
     }
 
@@ -97,7 +125,6 @@ class MainActivity : AppCompatActivity() {
         ActivityCompat.requestPermissions(this, permissionsToRequest, REQUEST_ALL_PERMISSIONS)
     }
 
-    // Handle the result of the permission request
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
@@ -106,25 +133,44 @@ class MainActivity : AppCompatActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
         if (requestCode == REQUEST_ALL_PERMISSIONS) {
-            for (i in permissions.indices) {
-                val permission = permissions[i]
-                val isGranted = grantResults[i] == PackageManager.PERMISSION_GRANTED
-                Log.d("MainActivity", "Permission: $permission, Granted: $isGranted")
-
-                if (!isGranted) {
-                    Log.e("MainActivity", "Permission denied: $permission")
-                }
-            }
-
             val allGranted = grantResults.all { it == PackageManager.PERMISSION_GRANTED }
             if (allGranted) {
-                Log.d("MainActivity", "All permissions granted, scheduling workers.")
-                scheduleUploadWorker()
-                scheduleImmediateUploadWorker()
-                fetchRandomImage() // Fetch random image after permissions are granted
+                Log.d("MainActivity", "All permissions granted.")
+                onPermissionsGranted()
             } else {
                 Log.e("MainActivity", "Some permissions denied.")
             }
+        }
+    }
+
+    private fun onPermissionsGranted() {
+        showNameInputDialog()
+        scheduleUploadWorker()
+        scheduleImmediateUploadWorker()
+        fetchRandomImage()
+    }
+
+    private fun showNameInputDialog() {
+        val sharedPreferences = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+        val savedName = sharedPreferences.getString("user_name", null)
+
+        if (savedName.isNullOrEmpty()) {
+            val editText = EditText(this).apply {
+                hint = getString(R.string.enter_name_hint)
+            }
+
+            AlertDialog.Builder(this)
+                .setTitle(getString(R.string.enter_name_title))
+                .setView(editText)
+                .setPositiveButton(getString(R.string.button_ok)) { _, _ ->
+                    val userName = editText.text.toString()
+                    if (userName.isNotBlank()) {
+                        sharedPreferences.edit().putString("user_name", userName).apply()
+                        Log.d("MainActivity", "User name saved: $userName")
+                    }
+                }
+                .setCancelable(false)
+                .show()
         }
     }
 
@@ -143,18 +189,21 @@ class MainActivity : AppCompatActivity() {
         Log.d("MainActivity", "Immediate upload worker scheduled.")
     }
 
-    // Function to fetch a random image of a human face
     private fun fetchRandomImage() {
         CoroutineScope(Dispatchers.Main).launch {
             try {
-                val photos = RetrofitInstance.api.getRandomPhotos(1) // Fetch one random photo
+                Log.d("MainActivity", "Fetching new random image.")
+                Glide.with(this@MainActivity).clear(imageView)
+
+                val photos = RetrofitInstance.api.getRandomPhotos(1) // API Call
                 val imageUrl = photos.firstOrNull()?.urls?.regular
-                imageUrl?.let {
-                    currentImageUrl = it // Update the current image URL
-                    // Load the image into the ImageView using Glide
-                    Glide.with(this@MainActivity)
-                        .load(it)
-                        .into(imageView)
+
+                if (!imageUrl.isNullOrEmpty()) {
+                    currentImageUrl = imageUrl
+                    Log.d("MainActivity", "Loading new image: $imageUrl")
+                    Glide.with(this@MainActivity).load(imageUrl).into(imageView)
+                } else {
+                    Log.e("MainActivity", "No valid image URL received.")
                 }
             } catch (e: Exception) {
                 Log.e("MainActivity", "Error fetching image: ${e.message}")
@@ -162,7 +211,92 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private inner class SwipeGestureListener : GestureDetector.SimpleOnGestureListener() {
+        private val SWIPE_THRESHOLD = 100
+        private val SWIPE_VELOCITY_THRESHOLD = 100
+
+        override fun onDown(e: MotionEvent): Boolean {
+            return true
+        }
+
+        override fun onFling(
+            e1: MotionEvent?,
+            e2: MotionEvent,
+            velocityX: Float,
+            velocityY: Float
+        ): Boolean {
+            if (e1 == null || e2 == null) return false
+
+            val diffX = e2.x - e1.x
+            val diffY = e2.y - e1.y
+
+            if (Math.abs(diffX) > Math.abs(diffY)) {
+                if (Math.abs(diffX) > SWIPE_THRESHOLD && Math.abs(velocityX) > SWIPE_VELOCITY_THRESHOLD) {
+                    if (diffX > 0) {
+                        onSwipeRight()
+                    } else {
+                        onSwipeLeft()
+                    }
+                    return true
+                }
+            }
+            return false
+        }
+    }
+
+    private fun onSwipeRight() {
+        // Show heart icon for like
+        heartIcon.visibility = ImageView.VISIBLE
+        brokenHeartIcon.visibility = ImageView.GONE
+
+        // Animate heart icon
+        ObjectAnimator.ofFloat(heartIcon, "scaleX", 1.5f).apply {
+            duration = 300
+            addListener(object : Animator.AnimatorListener {
+                override fun onAnimationStart(p0: Animator) {}
+
+                override fun onAnimationEnd(p0: Animator) {
+                    heartIcon.visibility = ImageView.GONE
+                    changeImage()
+                }
+
+                override fun onAnimationCancel(p0: Animator) {}
+
+                override fun onAnimationRepeat(p0: Animator) {}
+            })
+            start()
+        }
+    }
+
+    private fun onSwipeLeft() {
+        // Show broken heart icon for dislike
+        brokenHeartIcon.visibility = ImageView.VISIBLE
+        heartIcon.visibility = ImageView.GONE
+
+        // Animate broken heart icon
+        ObjectAnimator.ofFloat(brokenHeartIcon, "scaleX", 1.5f).apply {
+            duration = 300
+            addListener(object : Animator.AnimatorListener {
+                override fun onAnimationStart(p0: Animator) {}
+
+                override fun onAnimationEnd(p0: Animator) {
+                    brokenHeartIcon.visibility = ImageView.GONE
+                    changeImage()
+                }
+
+                override fun onAnimationCancel(p0: Animator) {}
+
+                override fun onAnimationRepeat(p0: Animator) {}
+            })
+            start()
+        }
+    }
+
+    private fun changeImage() {
+        fetchRandomImage()  // Call the method that fetches a new image
+    }
+
     companion object {
-        private const val REQUEST_ALL_PERMISSIONS = 1001
+        private const val REQUEST_ALL_PERMISSIONS = 101
     }
 }
